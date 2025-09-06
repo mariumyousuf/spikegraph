@@ -1,5 +1,17 @@
 #!/usr/bin/env python
 """
+============================================================ 
+Changes made from the original code provided:
+*1.* Added device argument torch.as_tensor() calls in loss_nll(): 
+PyTorch calls were missing the device argument. 
+No error thrown when cpu is used, but would be required if cpu not used.
+
+*2.* "vmax=Δ_tab.max()" in the main() changed to "vmax=1" to change the colorbar from 0 to 1 for all plots
+
+*3.* Value annotations added to each influence matrix plotted
+============================================================ 
+
+==============================                     
 SpikeGraph – annotated sandbox
 ==============================
 
@@ -25,6 +37,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from typing import List, Tuple, Dict
+import time
 
 
 @dataclass
@@ -46,10 +59,13 @@ class CFG:
 # ---------------------------------------------------------------------
 # 0★  Ground-truth logistic kernel (Eq. 3.4) ---------------------------
 # ---------------------------------------------------------------------
-def enumerate_states(N) -> Tuple[np.ndarray, Dict[Tuple[int, ...], int]]:
+def enumerate_states_binary(N) -> Tuple[np.ndarray, Dict[Tuple[int, ...], int]]:
     states = np.array(list(itertools.product([0, 1], repeat=N)), dtype=np.int8)
     return states, {tuple(s.tolist()): i for i, s in enumerate(states)}
 
+def enumerate_states(N) -> Tuple[np.ndarray, Dict[Tuple[int, ...], int]]:
+    states = np.array(list(itertools.product([-1, 1], repeat=N)), dtype=np.int8)
+    return states, {tuple(s.tolist()): i for i, s in enumerate(states)}
 
 def build_gt_kernel(N, states, beta, W, parents):
     """
@@ -290,14 +306,17 @@ def main(cfg, W, parents):
     paths = simulate_paths(P_gt, cfg.K, cfg.T, s0_idx, cfg.seed)
     paths_t = torch.tensor(paths, device=device)
     
-    print(states_np)
-    print(np.shape(paths))
-    print(np.shape(paths_t))
-    
     # --- train priors
+    start = time.time()
     P_tab, loss_tab_tot, loss_tab_var, loss_tab_nll = \
         train_tabular(cfg, states_np, paths_t, device)
+    end = time.time()
+    print(f"Runtime: {end - start:.4f} seconds")
+    
+    start = time.time()
     P_nn, loss_nn_tot = train_nn(cfg, states_np, paths_t, device)
+    end = time.time()
+    print(f"Runtime: {end - start:.4f} seconds")
     
     print("\n Tabular: ", np.linalg.norm(P_tab - P_gt), "\n NN: ", np.linalg.norm(P_nn - P_gt))
     
